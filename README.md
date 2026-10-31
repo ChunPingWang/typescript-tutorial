@@ -15,6 +15,7 @@
 - [第 0 幕：TypeScript 是什麼？為什麼要學？](#第-0-幕typescript-是什麼為什麼要學)
 - [第 1 幕：開店前的準備 —— 環境設定與專案建立](#第-1-幕開店前的準備--環境設定與專案建立)
 - [第 2 幕：菜單上的第一杯咖啡 —— 變數與基本型別](#第-2-幕菜單上的第一杯咖啡--變數與基本型別)
+- [第 3 幕：一張完整的菜單 —— 陣列、物件與介面](#第-3-幕一張完整的菜單--陣列物件與介面)
 
 ---
 
@@ -472,4 +473,159 @@ error TS2322: Type 'string' is not assignable to type 'number'.
 1. 新增一個變數 `tableCount`，記錄店裡有幾張桌子，印出「本店共有 N 張桌子」。
 2. 把 `isOpen` 改成 `false`，看看輸出怎麼變。
 3. 試著宣告 `const todaySpecial = "拿鐵";` 然後在下一行改它的值，看看 TypeScript 說什麼。
+
+---
+
+## 第 3 幕：一張完整的菜單 —— 陣列、物件與介面
+
+> **店長的需求**：「菜單上有美式、拿鐵、卡布奇諾、手沖單品，每一項有編號、名稱、價格，
+> 有的還有一段說明。我要能一次把整張菜單印出來。」
+
+### 新概念 1：陣列 —— 把同一種東西排成一列
+
+一間店不會只賣一種飲料。要記錄「一堆」東西，用**陣列**：
+
+```ts
+const drinkNames: string[] = ["美式", "拿鐵", "卡布奇諾"];
+```
+
+- `string[]` 讀作「字串陣列」，意思是「一排字串」。
+- 陣列裡的東西從 **0** 開始編號：`drinkNames[0]` 是「美式」，`drinkNames[1]` 是「拿鐵」。
+- `drinkNames.length` 告訴你裡面有幾個。
+
+### 新概念 2：物件 —— 把相關資料包成一組
+
+一個品項有名稱、價格、說明，這些資料應該綁在一起，而不是散落在三個變數裡。
+**物件**就是「一組用名字區分的資料」：
+
+```ts
+const latte = {
+  name: "拿鐵",
+  price: 120,
+};
+```
+
+用 `latte.name` 取得名稱，`latte.price` 取得價格。
+大括號裡每一組 `名字: 值` 叫做**屬性**。
+
+### 新概念 3：介面（interface）—— 幫物件定規格
+
+如果菜單上有十幾個品項，你怎麼保證每一個都有 `name` 和 `price`，
+而且沒有人把 `price` 打成 `pirce`？
+答案是先用 **interface** 定義「一個菜單品項該長什麼樣」：
+
+```ts
+interface MenuItem {
+  readonly id: number;   // readonly：建立後不能改
+  name: string;
+  price: number;
+  description?: string;  // ?：這個欄位可有可無
+}
+```
+
+這就像點餐單的印刷範本：欄位固定，每一張單子照著填。
+
+- `readonly`：這個欄位填了就不能改。品項編號不該被改掉。
+- `?`：**可選屬性**。不是每種飲料都有說明文字。
+
+之後宣告變數時標上 `: MenuItem`，TypeScript 就會檢查你有沒有填對、填齊。
+
+### 動手寫：`src/03-menu.ts`
+
+```ts
+// 第 3 幕：一張完整的菜單 —— 陣列、物件與介面（interface）
+
+// 1. 陣列：同一種東西放一排
+const drinkNames: string[] = ["美式", "拿鐵", "卡布奇諾"];
+const prices: number[] = [90, 120, 130];
+
+console.log(`第一個品項是 ${drinkNames[0]}，價格 ${prices[0]} 元`);
+console.log(`菜單上共有 ${drinkNames.length} 種飲料`);
+
+// 2. 介面（interface）：描述「一個菜單品項長什麼樣」
+interface MenuItem {
+  readonly id: number;   // readonly：建立後不能改
+  name: string;
+  price: number;
+  description?: string;  // ?：這個欄位可有可無
+}
+
+// 3. 物件：照著介面的規格填資料
+const latte: MenuItem = {
+  id: 2,
+  name: "拿鐵",
+  price: 120,
+  description: "濃縮咖啡加上綿密牛奶",
+};
+
+const americano: MenuItem = {
+  id: 1,
+  name: "美式",
+  price: 90,
+  // description 可以不填
+};
+
+// 4. 介面 + 陣列：整張菜單
+const menu: MenuItem[] = [
+  americano,
+  latte,
+  { id: 3, name: "卡布奇諾", price: 130, description: "奶泡多一點" },
+  { id: 4, name: "手沖單品", price: 150 },
+];
+
+// 5. 走訪陣列：把菜單印出來
+for (const item of menu) {
+  // 用 ?? 給「沒填」的欄位一個預設文字
+  console.log(`[${item.id}] ${item.name} — ${item.price} 元（${item.description ?? "無說明"}）`);
+}
+
+// 6. type 別名：另一種描述形狀的方式，功能與 interface 大致相同
+type Category = {
+  name: string;
+  items: MenuItem[];
+};
+
+const coffeeCategory: Category = { name: "咖啡", items: menu };
+console.log(`「${coffeeCategory.name}」分類共有 ${coffeeCategory.items.length} 個品項`);
+```
+
+補充說明：
+
+- `for (const item of menu) { ... }` 是**迴圈**：把 `menu` 裡的每一個品項輪流放進 `item`，
+  執行一次大括號裡的程式。
+- `item.description ?? "無說明"`：`??` 讀作「如果左邊沒有值，就用右邊」。
+  因為 `description` 是可選的，可能沒填，這樣可以避免印出 `undefined`。
+- `type` 與 `interface` 都能描述物件的形狀。初學階段把它們當成一樣的即可，
+  習慣上描述物件用 `interface`，描述其他東西（第 5 幕的聯合型別）用 `type`。
+
+### 執行結果
+
+```
+第一個品項是 美式，價格 90 元
+菜單上共有 3 種飲料
+[1] 美式 — 90 元（無說明）
+[2] 拿鐵 — 120 元（濃縮咖啡加上綿密牛奶）
+[3] 卡布奇諾 — 130 元（奶泡多一點）
+[4] 手沖單品 — 150 元（無說明）
+「咖啡」分類共有 4 個品項
+```
+
+### 故意寫錯看看
+
+`src-errors/03-missing-field.ts` 裡有兩個錯誤：少填 `price`，以及想改 `readonly` 的 `id`。
+執行 `npx tsc -p src-errors` 可以看到：
+
+```
+error TS2741: Property 'price' is missing in type '{ id: number; name: string; }' but required in type 'MenuItem'.
+error TS2540: Cannot assign to 'id' because it is a read-only property.
+```
+
+第一句：「`price` 屬性沒填，但 `MenuItem` 規定一定要有。」
+第二句：「不能指定值給 `id`，因為它是唯讀屬性。」
+
+### 小練習
+
+1. 在菜單加一個「抹茶拿鐵」，價格 140，說明自己想。
+2. 在 `MenuItem` 加一個可選欄位 `isHot?: boolean`，並且只在拿鐵填 `true`。
+3. 試著在某個品項多加一個介面裡沒有的欄位（例如 `color: "綠"`），看 TypeScript 怎麼說。
 
