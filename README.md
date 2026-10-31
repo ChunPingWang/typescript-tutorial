@@ -23,6 +23,7 @@
 - [第 8 幕：蛋糕也要能排隊 —— 泛型](#第-8-幕蛋糕也要能排隊--泛型)
 - [第 9 幕：程式碼變多了 —— 模組與專案結構](#第-9-幕程式碼變多了--模組與專案結構)
 - [第 10 幕：向吧台送單要等一下 —— 非同步程式](#第-10-幕向吧台送單要等一下--非同步程式)
+- [第 11 幕：打烊前的整理 —— 工具型別與 unknown](#第-11-幕打烊前的整理--工具型別與-unknown)
 
 ---
 
@@ -1822,4 +1823,169 @@ TypeScript 會提醒你 `result` 的型別是 `Promise<string>` 而不是 `strin
 1. 把 `serveAll` 改成用 `for` 迴圈一杯一杯 `await`，觀察總時間變成多少。
 2. 新增一個 `drink === "卡布奇諾"` 時要多等 1 秒的「打奶泡」步驟。
 3. 查一下 `Promise.allSettled`，想想它和 `Promise.all` 在「其中一杯失敗」時有什麼不同。
+
+---
+
+## 第 11 幕：打烊前的整理 —— 工具型別與 unknown
+
+> **店長的需求**：「幾件雜事：（1）品項要能只改價格不動其他欄位；（2）門口看板只要顯示名稱和價格；
+> （3）新增品項時還沒有編號；（4）要有庫存表；（5）稅率設定不准被改；
+> （6）以後菜單會從檔案讀進來，讀進來的資料要先驗證再用。」
+
+這一幕是雜貨鋪，每個需求對應一個小工具。它們都是 TypeScript 內建的，不用自己寫。
+
+### 新概念 1：工具型別 —— 用現有型別變出新型別
+
+| 工具型別 | 意思 | 對應需求 |
+|---------|------|---------|
+| `Partial<T>` | T 的所有欄位都變成可選 | （1）局部更新 |
+| `Pick<T, K>` | 只挑 T 的某幾個欄位 | （2）看板精簡版 |
+| `Omit<T, K>` | 排除 T 的某幾個欄位 | （3）還沒有 id 的新品項 |
+| `Record<K, V>` | 鍵是 K、值是 V 的對照表 | （4）庫存表 |
+| `Readonly<T>` | T 的所有欄位都變成唯讀 | （5）設定不准改 |
+
+它們的共通點是：**不必重新定義一遍 `MenuItem`**，改了原本的介面，這些衍生型別會自動跟著變。
+
+### 新概念 2：unknown —— 來路不明的東西要先檢查
+
+從檔案或網路讀進來的資料，TypeScript 不可能知道長什麼樣。
+JavaScript 的 `JSON.parse` 回傳的型別是 `any`，意思是「什麼都行」。
+**`any` 等於關掉 TypeScript 的所有檢查**，新手最常因此踩坑。
+
+更安全的選擇是 `unknown`：「我不知道這是什麼，所以**不准你直接用**，要先檢查。」
+檢查的方式是寫一個**型別守衛**（type guard）函式：
+
+```ts
+function isMenuItem(value: unknown): value is MenuItem { ... }
+```
+
+回傳型別 `value is MenuItem` 的意思是：「如果這個函式回傳 `true`，那 `value` 就是 `MenuItem`。」
+之後用 `if (isMenuItem(data))` 檢查，區塊裡 TypeScript 就會把 `data` 當成 `MenuItem`。
+
+### 新概念 3：型別斷言 —— 「相信我，它就是這個型別」
+
+`value as Record<string, unknown>` 叫**型別斷言**（type assertion），
+意思是告訴 TypeScript「把它當成這個型別處理」。
+這是在**你比編譯器更清楚**的情況下使用，但也代表 TypeScript 不會再幫你檢查，
+請少用，而且用的時候要像範例這樣，前面已經做過足夠的檢查。
+
+### 動手寫：`src/11-utility-types.ts`
+
+```ts
+// 第 11 幕：打烊前的整理 —— 常用工具型別、unknown 與型別斷言
+
+interface MenuItem {
+  readonly id: number;
+  name: string;
+  price: number;
+  description?: string;
+}
+
+// 1. Partial<T>：所有欄位都變成「可有可無」，適合「局部更新」
+type MenuItemUpdate = Partial<MenuItem>;
+
+function updateMenuItem(item: MenuItem, changes: MenuItemUpdate): MenuItem {
+  return { ...item, ...changes }; // 用展開運算子合併
+}
+
+// 2. Pick<T, K>：只挑幾個欄位，例如給看板用的精簡版
+type MenuSummary = Pick<MenuItem, "name" | "price">;
+
+// 3. Omit<T, K>：排除幾個欄位，例如「新增品項時還沒有 id」
+type NewMenuItem = Omit<MenuItem, "id">;
+
+// 4. Record<K, V>：鍵固定為某種型別的字典，例如庫存表
+const stock: Record<string, number> = {
+  美式: 50,
+  拿鐵: 30,
+  卡布奇諾: 0,
+};
+
+// 5. Readonly<T>：整個物件都不能改
+const settings: Readonly<{ taxRate: number; currency: string }> = {
+  taxRate: 0.05,
+  currency: "TWD",
+};
+// settings.taxRate = 0.1; // 錯誤！
+
+// 6. unknown：來路不明的資料（例如從檔案或網路讀進來的 JSON）
+//    不能直接當成 MenuItem 用，要先檢查
+function isMenuItem(value: unknown): value is MenuItem {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.id === "number" &&
+    typeof obj.name === "string" &&
+    typeof obj.price === "number"
+  );
+}
+
+function parseMenuItem(json: string): MenuItem | null {
+  const data: unknown = JSON.parse(json);
+  if (isMenuItem(data)) {
+    return data; // 通過檢查後，TypeScript 知道 data 是 MenuItem
+  }
+  return null;
+}
+
+// ---- 實際跑一次 ----
+const latte: MenuItem = { id: 2, name: "拿鐵", price: 120 };
+const updated = updateMenuItem(latte, { price: 125, description: "新配方" });
+console.log("更新後：", updated);
+
+const summary: MenuSummary = { name: updated.name, price: updated.price };
+console.log("看板用精簡版：", summary);
+
+const draft: NewMenuItem = { name: "抹茶拿鐵", price: 140 };
+const created: MenuItem = { id: 5, ...draft };
+console.log("新品項：", created);
+
+for (const [name, qty] of Object.entries(stock)) {
+  console.log(`${name} 庫存 ${qty} 杯${qty === 0 ? "（售完）" : ""}`);
+}
+
+console.log(`稅率 ${settings.taxRate * 100}%，幣別 ${settings.currency}`);
+
+console.log("解析正常 JSON：", parseMenuItem('{"id":9,"name":"可可","price":100}'));
+console.log("解析壞掉的 JSON：", parseMenuItem('{"name":"沒有價格"}'));
+```
+
+補充：
+
+- `{ ...item, ...changes }`：**展開運算子** `...` 把物件的所有屬性攤開。
+  後面的會蓋掉前面的，所以 `changes` 裡有的欄位會覆蓋 `item` 的。這是「不改原物件、產生新物件」的慣用寫法。
+- `JSON` 是一種文字格式，長得像 JavaScript 物件，是程式之間交換資料最常見的方式。
+  `JSON.parse` 把文字變成物件，`JSON.stringify` 反過來。
+- `Object.entries(stock)` 把物件變成 `[鍵, 值]` 的陣列，方便用迴圈走訪。
+- `MenuItem | null`：找不到或驗證失敗時回傳 `null`，和 `undefined` 類似，都代表「沒有」。
+  慣例上 `undefined` 是「沒設定」，`null` 是「明確表示空」。初學時不必太糾結。
+
+### 執行結果
+
+```
+更新後： { id: 2, name: '拿鐵', price: 125, description: '新配方' }
+看板用精簡版： { name: '拿鐵', price: 125 }
+新品項： { id: 5, name: '抹茶拿鐵', price: 140 }
+美式 庫存 50 杯
+拿鐵 庫存 30 杯
+卡布奇諾 庫存 0 杯（售完）
+稅率 5%，幣別 TWD
+解析正常 JSON： { id: 9, name: '可可', price: 100 }
+解析壞掉的 JSON： null
+```
+
+### 關於 any 的忠告
+
+你會在網路上看到很多 `any`。它的意思是「關掉檢查」，寫起來很爽，但等於回到 JavaScript 的世界。
+原則：
+
+- 不知道型別時用 `unknown`，然後檢查。
+- 看到 `any` 就當成待辦事項，有空就換成正確的型別。
+- 如果 `tsconfig.json` 的 `strict` 有開（我們有），沒寫型別的參數會被視為「隱含 any」而報錯，這是好事。
+
+### 小練習
+
+1. 用 `Pick` 做一個 `type PriceTag = Pick<MenuItem, "id" | "price">`，寫函式回傳所有品項的價格標籤陣列。
+2. 把 `stock` 的型別改成 `Record<"美式" | "拿鐵" | "卡布奇諾", number>`，看看多加一個鍵或少一個鍵會怎樣。
+3. 擴充 `isMenuItem`，讓 `description` 如果存在就必須是 `string`。
 
