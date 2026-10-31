@@ -19,6 +19,7 @@
 - [第 4 幕：收銀機要會算錢 —— 函式](#第-4-幕收銀機要會算錢--函式)
 - [第 5 幕：客人說「大杯、少冰」—— 聯合型別與型別縮小](#第-5-幕客人說大杯少冰-聯合型別與型別縮小)
 - [第 6 幕：這杯做好了嗎？—— 判別聯合與 never](#第-6-幕這杯做好了嗎-判別聯合與-never)
+- [第 7 幕：店長想要一台點餐機 —— 類別](#第-7-幕店長想要一台點餐機--類別)
 
 ---
 
@@ -1073,4 +1074,176 @@ error TS2322: Type '{ kind: "refunded"; }' is not assignable to type 'never'.
 1. 新增一個狀態 `{ kind: "refunded"; amount: number }`，先看到錯誤，再補上 `case` 讓它消失。
 2. 寫一個函式 `isActive(status: OrderStatus): boolean`，等待中與製作中回傳 `true`。
 3. 把 `describeStatus` 的 `switch` 改用 `if (status.kind === "...")` 寫一次，感受兩者差別。
+
+---
+
+## 第 7 幕：店長想要一台點餐機 —— 類別
+
+> **店長的需求**：「我要一台『點餐機』：輸入客人名字和點的東西，它自動給訂單編號、算總價、
+> 把訂單存起來。我要能查某一筆訂單，也要能隨時看今天的總營業額。
+> 還有，訂單資料只能透過點餐機操作，不准別人直接亂改。」
+
+### 新概念：類別 —— 把資料和操作包在一起
+
+前幾幕我們把資料（訂單陣列）和操作資料的函式（算總價）分開放。
+當它們越來越多，就會想把「屬於同一台機器的東西」收納在一起。這就是**類別**（class）。
+
+你可以把類別想成**點餐機的設計圖**，`new Register("小日子咖啡")` 則是照設計圖**做出一台實際的機器**。
+
+類別有三種成員：
+
+| 成員 | 是什麼 | 範例 |
+|------|--------|------|
+| **屬性** | 機器裡存的資料 | `orders`、`nextId`、`shopName` |
+| **建構子** `constructor` | 製造機器時執行的初始化步驟 | 把店名記下來 |
+| **方法** | 機器能做的事（函式） | `createOrder()`、`findOrder()` |
+
+### 存取修飾字：誰可以碰
+
+- `public`（預設，可以不寫）：外面可以讀寫。
+- `private`：只有類別內部能用。外面想碰 `register.orders`，編譯直接報錯。
+- `readonly`：可以讀，不能改。
+
+店長說「訂單不准亂改」，用 `private` 就能做到。
+
+### getter：像屬性一樣讀取計算結果
+
+「今天總營業額」每次都要加總一遍，它是算出來的，不是存起來的。
+用 `get totalRevenue()` 定義後，外面可以寫 `register.totalRevenue`（不加括號），
+讀起來像屬性，實際上是即時計算。
+
+### 動手寫：`src/07-class-register.ts`
+
+```ts
+// 第 7 幕：店長想要一台點餐機 —— 類別（class）
+
+interface MenuItem {
+  readonly id: number;
+  name: string;
+  price: number;
+}
+
+type Size = "小杯" | "中杯" | "大杯";
+
+interface OrderItem {
+  item: MenuItem;
+  size: Size;
+  quantity: number;
+}
+
+interface Order {
+  id: number;
+  customerName: string;
+  lines: OrderItem[];
+  total: number;
+}
+
+const SIZE_EXTRA: Record<Size, number> = { 小杯: 0, 中杯: 10, 大杯: 20 };
+
+// 1. class：把「資料」和「操作資料的方法」包在一起
+class Register {
+  // 2. 屬性（欄位）：private 表示只有這個 class 內部能碰
+  private orders: Order[] = [];
+  private nextId = 1;
+  readonly shopName: string;
+
+  // 3. 建構子：new Register("...") 的時候會執行
+  constructor(shopName: string) {
+    this.shopName = shopName;
+  }
+
+  // 4. 方法：public 是預設值，外面可以呼叫
+  createOrder(customerName: string, lines: OrderItem[]): Order {
+    const total = lines.reduce(
+      (sum, line) => sum + (line.item.price + SIZE_EXTRA[line.size]) * line.quantity,
+      0,
+    );
+    const order: Order = { id: this.nextId++, customerName, lines, total };
+    this.orders.push(order);
+    return order;
+  }
+
+  findOrder(id: number): Order | undefined {
+    return this.orders.find((order) => order.id === id);
+  }
+
+  // 5. getter：像讀屬性一樣讀取計算結果（register.totalRevenue，不用加括號）
+  get totalRevenue(): number {
+    return this.orders.reduce((sum, order) => sum + order.total, 0);
+  }
+
+  get orderCount(): number {
+    return this.orders.length;
+  }
+}
+
+// ---- 實際跑一次 ----
+const latte: MenuItem = { id: 2, name: "拿鐵", price: 120 };
+const americano: MenuItem = { id: 1, name: "美式", price: 90 };
+
+const register = new Register("小日子咖啡");
+
+const order1 = register.createOrder("小美", [
+  { item: latte, size: "大杯", quantity: 2 },
+]);
+const order2 = register.createOrder("阿明", [
+  { item: americano, size: "中杯", quantity: 1 },
+  { item: latte, size: "小杯", quantity: 1 },
+]);
+
+console.log(`${register.shopName} 今日訂單：`);
+console.log(`#${order1.id} ${order1.customerName} 合計 ${order1.total} 元`);
+console.log(`#${order2.id} ${order2.customerName} 合計 ${order2.total} 元`);
+console.log(`共 ${register.orderCount} 筆，營業額 ${register.totalRevenue} 元`);
+
+const found = register.findOrder(2);
+console.log(found ? `找到訂單 #2，客人是 ${found.customerName}` : "找不到訂單 #2");
+
+// 下面這行打開會出錯：orders 是 private，外面不能直接動（見 src-errors/07-private.ts）
+// register.orders = [];
+```
+
+這一幕出現了幾個新的 JavaScript 工具，值得認識：
+
+- `this`：在類別裡代表「這一台機器自己」。`this.orders` 就是這台機器的訂單陣列。
+- `this.nextId++`：先用目前的值，然後把 `nextId` 加 1。所以第一筆訂單是 1，第二筆是 2。
+- `Record<Size, number>`：一個「鍵是 Size、值是數字」的對照表。第 11 幕會再談。
+- `array.reduce((累計, 目前元素) => 新的累計, 初始值)`：把陣列「摺疊」成一個值，最常用來加總。
+- `array.find(條件)`：找出第一個符合條件的元素，找不到回傳 `undefined`。
+  所以 `findOrder` 的回傳型別是 `Order | undefined`，呼叫的人**必須**處理找不到的情況。
+- `{ id: this.nextId++, customerName, lines, total }`：當變數名稱和屬性名稱一樣時，
+  `customerName: customerName` 可以縮寫成 `customerName`。
+
+### 執行結果
+
+```
+小日子咖啡 今日訂單：
+#1 小美 合計 280 元
+#2 阿明 合計 220 元
+共 2 筆，營業額 500 元
+找到訂單 #2，客人是 阿明
+```
+
+### 故意寫錯看看
+
+`src-errors/07-private.ts`：從外面動 `private` 的 `orders`。
+
+```
+error TS2341: Property 'orders' is private and only accessible within class 'Register'.
+```
+
+另一個常見錯誤在 `src-errors/10-possibly-undefined.ts`：`find` 找不到東西時會是 `undefined`，直接使用會被擋下：
+
+```
+error TS18048: 'found' is possibly 'undefined'.
+```
+
+「`found` 可能是 `undefined`。」解法就像範例裡那樣，先用 `if (found)` 或三元運算子確認再使用。
+
+### 小練習
+
+1. 新增方法 `cancelOrder(id: number): boolean`，把訂單從陣列移除，成功回傳 `true`。
+   （提示：`this.orders = this.orders.filter((o) => o.id !== id)`。）
+2. 新增 getter `averageOrderValue`，回傳平均客單價。沒有訂單時回傳 0。
+3. 把 `shopName` 的 `readonly` 拿掉，試著在外面改店名，再加回去看差別。
 
