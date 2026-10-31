@@ -17,6 +17,7 @@
 - [第 2 幕：菜單上的第一杯咖啡 —— 變數與基本型別](#第-2-幕菜單上的第一杯咖啡--變數與基本型別)
 - [第 3 幕：一張完整的菜單 —— 陣列、物件與介面](#第-3-幕一張完整的菜單--陣列物件與介面)
 - [第 4 幕：收銀機要會算錢 —— 函式](#第-4-幕收銀機要會算錢--函式)
+- [第 5 幕：客人說「大杯、少冰」—— 聯合型別與型別縮小](#第-5-幕客人說大杯少冰-聯合型別與型別縮小)
 
 ---
 
@@ -788,4 +789,149 @@ error TS2554: Expected 1-2 arguments, but got 3.
 1. 寫一個函式 `mostExpensive(items: MenuItem[]): MenuItem`，回傳最貴的品項。
 2. 把 `applyDiscount` 改成「折扣率超過 1 或小於 0 時，直接回傳原價」。
 3. 把 `printReceipt` 改成也印出「會員價」那一行。
+
+---
+
+## 第 5 幕：客人說「大杯、少冰」—— 聯合型別與型別縮小
+
+> **店長的需求**：「杯型只有小杯、中杯、大杯三種，中杯加 10 元、大杯加 20 元。
+> 溫度只能是熱、冰、少冰、去冰。小美上次打了『特大杯』，吧台看不懂，這種事不能再發生。
+> 另外，會員編號有的是數字、有的是英文字母開頭的卡號，兩種都要能顯示。」
+
+### 新概念 1：字面量型別 —— 值本身就是型別
+
+到目前為止，`string` 代表「任何文字」。但杯型不該是任何文字，
+只能是那三個字。TypeScript 允許你把**特定的值**當成型別：
+
+```ts
+type Size = "小杯" | "中杯" | "大杯";
+```
+
+- `"小杯"` 這種「值本身就是型別」叫**字面量型別**（literal type）。
+- `|` 讀作「或」，把幾個型別串起來叫**聯合型別**（union type）。
+- 整句意思：「`Size` 只能是小杯、中杯、大杯其中之一。」
+
+這下小美再打「特大杯」，程式還沒跑就會被擋下來。
+
+### 新概念 2：型別縮小 —— 用 if 幫 TypeScript 看清楚
+
+會員編號可能是數字或文字：`memberId: string | number`。
+問題來了：文字有 `.toUpperCase()`（轉大寫），數字沒有。
+你不能對一個「可能是數字」的東西呼叫 `.toUpperCase()`。
+
+解法是先用 `typeof` 檢查，TypeScript 會在 `if` 區塊裡**自動縮小**型別：
+
+```ts
+if (typeof memberId === "string") {
+  // 這裡 TypeScript 確定 memberId 是 string，可以安心用文字的方法
+}
+// 這裡 TypeScript 確定 memberId 是 number
+```
+
+這叫**型別縮小**（narrowing），是 TypeScript 最聰明的功能之一。
+
+### 動手寫：`src/05-union-types.ts`
+
+```ts
+// 第 5 幕：客人說「大杯、少冰」—— 聯合型別、字面量型別與型別縮小
+
+interface MenuItem {
+  readonly id: number;
+  name: string;
+  price: number;
+}
+
+// 1. 字面量型別 + 聯合型別：只能是這幾個值之一
+type Size = "小杯" | "中杯" | "大杯";
+type Temperature = "熱" | "冰" | "少冰" | "去冰";
+
+// 2. 一筆「點餐明細」：哪個品項、什麼杯型、什麼溫度、幾杯
+interface OrderItem {
+  item: MenuItem;
+  size: Size;
+  temperature: Temperature;
+  quantity: number;
+}
+
+// 3. 用 switch 針對每一種可能處理：杯型加價
+function sizeExtra(size: Size): number {
+  switch (size) {
+    case "小杯":
+      return 0;
+    case "中杯":
+      return 10;
+    case "大杯":
+      return 20;
+  }
+}
+
+// 4. 單筆明細的小計
+function lineTotal(line: OrderItem): number {
+  return (line.item.price + sizeExtra(line.size)) * line.quantity;
+}
+
+// 5. 型別縮小（narrowing）：會員編號可能是數字或文字
+function describeMember(memberId: string | number): string {
+  if (typeof memberId === "string") {
+    // 這個區塊裡，TypeScript 知道 memberId 是 string
+    return `會員卡號 ${memberId.toUpperCase()}`;
+  }
+  // 這裡 TypeScript 知道 memberId 是 number
+  return `會員編號 ${memberId.toString().padStart(6, "0")}`;
+}
+
+// ---- 實際跑一次 ----
+const latte: MenuItem = { id: 2, name: "拿鐵", price: 120 };
+const americano: MenuItem = { id: 1, name: "美式", price: 90 };
+
+const lines: OrderItem[] = [
+  { item: latte, size: "大杯", temperature: "少冰", quantity: 2 },
+  { item: americano, size: "小杯", temperature: "熱", quantity: 1 },
+];
+
+for (const line of lines) {
+  console.log(
+    `${line.item.name} ${line.size} ${line.temperature} x${line.quantity} = ${lineTotal(line)} 元`,
+  );
+}
+
+console.log(describeMember("vip001"));
+console.log(describeMember(42));
+
+// 下面這行打開會出錯：「特大杯」不在 Size 的選項裡（見 src-errors/05-wrong-size.ts）
+// const wrong: OrderItem = { item: latte, size: "特大杯", temperature: "冰", quantity: 1 };
+```
+
+補充：
+
+- `switch (size) { case "小杯": ... }` 是另一種條件判斷，適合「針對每一個可能的值做不同事」。
+  注意 `sizeExtra` 的 `switch` 沒有 `default`，但 TypeScript 不會抱怨，
+  因為它知道 `Size` 只有三種可能，而三種都處理到了。
+- 在 VS Code 裡打 `size: "` 的時候，會自動跳出「小杯、中杯、大杯」讓你選。這是字面量型別的另一個好處。
+
+### 執行結果
+
+```
+拿鐵 大杯 少冰 x2 = 280 元
+美式 小杯 熱 x1 = 90 元
+會員卡號 VIP001
+會員編號 000042
+```
+
+### 故意寫錯看看
+
+`src-errors/05-wrong-size.ts`：
+
+```
+error TS2322: Type '"特大杯"' is not assignable to type 'Size'.
+```
+
+「`"特大杯"` 不能指定給 `Size`。」小美的失誤從此不可能發生。
+
+### 小練習
+
+1. 新增 `type Sweetness = "正常" | "半糖" | "無糖"`，加到 `OrderItem` 裡，並印出來。
+2. 把 `sizeExtra` 改成用 `if / else if` 寫，比較一下哪種好讀。
+3. 寫一個函式 `describeTemperature(t: Temperature): string`，冰的回傳「請加冰塊」，其他回傳「不加冰」。
+   （提示：`"冰" | "少冰"` 要加冰塊。）
 
