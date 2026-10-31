@@ -22,6 +22,7 @@
 - [第 7 幕：店長想要一台點餐機 —— 類別](#第-7-幕店長想要一台點餐機--類別)
 - [第 8 幕：蛋糕也要能排隊 —— 泛型](#第-8-幕蛋糕也要能排隊--泛型)
 - [第 9 幕：程式碼變多了 —— 模組與專案結構](#第-9-幕程式碼變多了--模組與專案結構)
+- [第 10 幕：向吧台送單要等一下 —— 非同步程式](#第-10-幕向吧台送單要等一下--非同步程式)
 
 ---
 
@@ -1666,4 +1667,159 @@ npm run dev src/09-modules/main.ts
 1. 新增 `src/09-modules/discount.ts`，匯出 `applyMemberDiscount(total: number): number`（9 折），在 `main.ts` 用它。
 2. 在 `menu.ts` 新增 `menuByCategory`，把咖啡與非咖啡分開。這需要先在 `types.ts` 的 `MenuItem` 加 `category` 欄位。
 3. 試著把 `import type` 改成普通 `import`，看看有沒有差（提示：這個設定下兩者都能跑，但 `import type` 意圖更清楚）。
+
+---
+
+## 第 10 幕：向吧台送單要等一下 —— 非同步程式
+
+> **店長的需求**：「送單到吧台後，飲料要做一陣子才會好。系統不能在那邊傻等，
+> 要能先收下一筆訂單。還有，豆子用完的時候要告訴客人，不能讓系統當掉。」
+
+### 新概念：非同步 —— 不用等的事就先去做別的
+
+到目前為止程式都是「一行跑完才跑下一行」。
+但現實中很多事要**等**：等吧台做飲料、等網路回應、等檔案讀取。
+如果程式傻等，整間店都會卡住。
+
+JavaScript 的解法是**非同步**：發出請求後先去做別的事，等結果回來再處理。
+TypeScript 用三個概念來表達：
+
+| 概念 | 意思 | 比喻 |
+|------|------|------|
+| `Promise<T>` | 「一件將來會完成的事，完成後會給你一個 T」 | 取餐號碼牌：現在拿到牌子，飲料之後才會好 |
+| `async` | 標記一個函式裡面「會等東西」 | 這個流程中間有等待時間 |
+| `await` | 「在這裡等 Promise 完成，然後拿結果」 | 聽到號碼被叫到，去拿飲料 |
+
+重點：`await` 只能寫在 `async` 函式裡。
+
+### 錯誤處理：try / catch
+
+等的事情可能失敗（豆子用完了）。用 `try { ... } catch (error) { ... }` 接住：
+
+- `try` 裡面放可能失敗的程式。
+- 失敗時跳到 `catch`，`error` 就是失敗的原因。
+- 在 `strict` 模式下 `error` 的型別是 `unknown`（第 11 幕會講），
+  要先用 `error instanceof Error` 確認它真的是錯誤物件，才能讀 `.message`。
+
+### 動手寫：`src/10-async.ts`
+
+```ts
+// 第 10 幕：向吧台送單要等一下 —— 非同步（Promise / async / await）
+
+interface Order {
+  id: number;
+  drink: string;
+  seconds: number; // 製作需要幾秒
+}
+
+// 1. Promise：代表「一件將來才會完成的事」
+//    用 setTimeout 模擬吧台製作飲料需要時間
+function makeDrink(order: Order): Promise<string> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(`#${order.id} ${order.drink} 做好了`);
+    }, order.seconds * 1000);
+  });
+}
+
+// 2. 模擬一個可能失敗的動作：查詢庫存
+function checkStock(drink: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (drink === "手沖單品") {
+        reject(new Error("手沖豆子用完了"));
+      } else {
+        resolve(true);
+      }
+    }, 300);
+  });
+}
+
+// 3. async / await：把非同步程式寫得像一步一步的同步程式
+async function serveOne(order: Order): Promise<void> {
+  console.log(`收到訂單 #${order.id}：${order.drink}`);
+  try {
+    await checkStock(order.drink);
+    const result = await makeDrink(order);
+    console.log(result);
+  } catch (error) {
+    // catch 到的 error 型別是 unknown，要先確認它是 Error 才能讀 message
+    if (error instanceof Error) {
+      console.log(`#${order.id} 失敗：${error.message}`);
+    }
+  }
+}
+
+// 4. Promise.all：好幾杯同時做，全部完成再往下走
+async function serveAll(orders: Order[]): Promise<void> {
+  console.log("\n--- 多杯同時製作 ---");
+  const start = Date.now();
+  const results = await Promise.all(orders.map((order) => makeDrink(order)));
+  for (const line of results) {
+    console.log(line);
+  }
+  console.log(`全部完成，共花 ${((Date.now() - start) / 1000).toFixed(1)} 秒`);
+}
+
+// ---- 實際跑一次 ----
+async function main(): Promise<void> {
+  await serveOne({ id: 1, drink: "拿鐵", seconds: 1 });
+  await serveOne({ id: 2, drink: "手沖單品", seconds: 2 });
+
+  await serveAll([
+    { id: 3, drink: "美式", seconds: 1 },
+    { id: 4, drink: "卡布奇諾", seconds: 1.5 },
+    { id: 5, drink: "拿鐵", seconds: 1 },
+  ]);
+}
+
+main();
+```
+
+補充：
+
+- `new Promise((resolve, reject) => { ... })`：建立一個 Promise。
+  事情做完呼叫 `resolve(結果)`，失敗呼叫 `reject(錯誤)`。
+  實務上你很少自己 `new Promise`，大多是呼叫別人寫好的（例如 `fetch` 抓網路資料）。
+  這裡自己寫是為了讓你看清楚它的內部。
+- `setTimeout(函式, 毫秒)`：幾毫秒之後執行函式。這是模擬「製作時間」的方法。
+- `Promise.all([...])`：把多個 Promise 一起等。三杯各要 1、1.5、1 秒，
+  **同時做**只要 1.5 秒，而不是 3.5 秒。這是非同步的威力。
+- `orders.map((order) => makeDrink(order))`：`map` 把陣列裡每個元素轉換成另一個東西，
+  這裡是把每張訂單轉成一個 Promise。
+
+### 執行結果
+
+```
+收到訂單 #1：拿鐵
+#1 拿鐵 做好了
+收到訂單 #2：手沖單品
+#2 失敗：手沖豆子用完了
+
+--- 多杯同時製作 ---
+#3 美式 做好了
+#4 卡布奇諾 做好了
+#5 拿鐵 做好了
+全部完成，共花 1.5 秒
+```
+
+注意「全部完成，共花 1.5 秒」，證明三杯是同時做的。
+
+### 常見錯誤
+
+忘了寫 `await`：
+
+```ts
+const result = makeDrink(order);  // 少了 await
+console.log(result);               // 印出 Promise { <pending> }，不是字串
+```
+
+TypeScript 會提醒你 `result` 的型別是 `Promise<string>` 而不是 `string`，
+當你想把它當字串用的時候就會報錯。
+
+### 小練習
+
+1. 把 `serveAll` 改成用 `for` 迴圈一杯一杯 `await`，觀察總時間變成多少。
+2. 新增一個 `drink === "卡布奇諾"` 時要多等 1 秒的「打奶泡」步驟。
+3. 查一下 `Promise.allSettled`，想想它和 `Promise.all` 在「其中一杯失敗」時有什麼不同。
 
