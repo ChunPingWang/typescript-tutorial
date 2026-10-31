@@ -25,6 +25,10 @@
 - [第 10 幕：向吧台送單要等一下 —— 非同步程式](#第-10-幕向吧台送單要等一下--非同步程式)
 - [第 11 幕：打烊前的整理 —— 工具型別與 unknown](#第-11-幕打烊前的整理--工具型別與-unknown)
 - [第 12 幕：正式上線 —— 編譯、輸出與執行](#第-12-幕正式上線--編譯輸出與執行)
+- [終幕：接下來往哪裡走](#終幕接下來往哪裡走)
+- [附錄 A：常見錯誤訊息對照表](#附錄-a常見錯誤訊息對照表)
+- [附錄 B：TypeScript 速查表](#附錄-btypescript-速查表)
+- [附錄 C：練習題提示](#附錄-c練習題提示)
 
 ---
 
@@ -2081,3 +2085,232 @@ Node.js 22.18 以上可以直接執行只有型別註記的 `.ts` 檔：`node sr
 2. 在 `tsconfig.json` 加上 `"sourceMap": true`，看看 `dist/` 多了什麼檔案，查一下它的用途。
 3. 刪掉 `dist/`，重新 `npm run build`，再 `npm start`。
 
+---
+
+## 終幕：接下來往哪裡走
+
+恭喜你走完整個故事。回顧一下，為了「小日子咖啡」的點餐系統，你學會了：
+
+| 幕 | 店長的需求 | 你學會的 TypeScript |
+|---|-----------|-------------------|
+| 1 | 準備工具 | Node.js、npm、tsconfig、tsx、tsc |
+| 2 | 記下店名和價格 | 變數、`string` / `number` / `boolean`、型別推論 |
+| 3 | 一張完整菜單 | 陣列、物件、`interface`、可選與唯讀屬性 |
+| 4 | 收銀機算錢 | 函式、參數與回傳型別、預設參數、箭頭函式 |
+| 5 | 杯型與溫度不能亂填 | 字面量型別、聯合型別、型別縮小 |
+| 6 | 訂單狀態 | 判別聯合、`never` 窮舉檢查 |
+| 7 | 點餐機 | `class`、`private`、`readonly`、getter |
+| 8 | 蛋糕也要排隊 | 泛型類別、泛型函式、泛型限制 |
+| 9 | 程式分檔 | `import` / `export`、專案結構 |
+| 10 | 送單要等 | `Promise`、`async` / `await`、`try` / `catch` |
+| 11 | 打烊雜事 | `Partial` / `Pick` / `Omit` / `Record`、`unknown`、型別守衛 |
+| 12 | 正式上線 | `tsc` 編譯、`dist/`、`.gitignore` |
+
+這些已經涵蓋日常開發 80% 會用到的 TypeScript。
+
+### 建議的下一步
+
+依你的目標選一條路：
+
+**想做網頁前端**
+- 學 HTML 與 CSS 基礎。
+- 學 **React**（搭配 TypeScript 是業界主流），從官方教學開始：<https://react.dev/learn>。
+- 用 **Vite** 建立專案：`npm create vite@latest`，選 React + TypeScript。
+
+**想做後端或 API**
+- 學 **Express** 或 **Fastify**，寫一個真正的「點餐 API」，讓前端或手機 App 可以呼叫。
+- 學資料庫基礎，用 **Prisma** 或 **Drizzle** 這類 TypeScript 友善的工具存取資料庫。
+
+**想把 TypeScript 學得更深**
+- 官方手冊：<https://www.typescriptlang.org/docs/handbook/>，從 "The Basics" 讀起，前面幾章你已經會了。
+- 進階主題：`keyof`、索引存取型別、條件型別、映射型別、模板字面量型別。
+- 練習題網站 type-challenges：<https://github.com/type-challenges/type-challenges>。
+
+**工程實務**
+- 學 **Git** 版本控制。
+- 學寫測試：**Vitest** 與 TypeScript 搭配很順。
+- 加上 **ESLint** 與 **Prettier**，讓程式碼風格一致。
+
+### 給自己的小專題
+
+把「小日子咖啡」繼續做下去是最好的練習：
+
+1. 把菜單改成從 `menu.json` 檔案讀取（用 Node.js 的 `fs` 模組與第 11 幕的型別守衛）。
+2. 加上會員系統：會員有等級，不同等級不同折扣。
+3. 每日結帳報表：按品項統計銷量、依時段統計營業額。
+4. 把它變成一個 HTTP API，用瀏覽器或 `curl` 下單。
+
+---
+
+## 附錄 A：常見錯誤訊息對照表
+
+這些都是本教學中實際出現過的訊息。遇到時先看錯誤代碼（TS 後面的數字），再對照這張表。
+
+| 錯誤代碼與訊息 | 白話意思 | 怎麼辦 |
+|---------------|---------|--------|
+| `TS2322: Type 'string' is not assignable to type 'number'.` | 文字不能放進數字變數（或反過來） | 檢查值的型別對不對；是不是忘了轉換 |
+| `TS2322: Type '"特大杯"' is not assignable to type 'Size'.` | 這個值不在允許的選項裡 | 改成允許的值，或在 `type` 定義裡加上新選項 |
+| `TS2322: Type '{ kind: "refunded"; }' is not assignable to type 'never'.` | `switch` 漏了一種情況沒處理 | 補上對應的 `case` |
+| `TS2741: Property 'price' is missing in type ... but required in type 'MenuItem'.` | 少填了必填欄位 | 補上欄位，或在介面裡把它改成可選 `?` |
+| `TS2540: Cannot assign to 'id' because it is a read-only property.` | 想改 `readonly` 的欄位 | 不要改它；真的要改就拿掉 `readonly` |
+| `TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.` | 傳給函式的參數型別不對 | 檢查呼叫時傳的值 |
+| `TS2554: Expected 1-2 arguments, but got 3.` | 參數數量不對 | 對照函式定義，確認傳幾個 |
+| `TS2341: Property 'orders' is private and only accessible within class 'Register'.` | 從外面碰 `private` 成員 | 改用類別提供的方法；或把它改成 `public` |
+| `TS18048: 'found' is possibly 'undefined'.` | 這個值可能不存在，不能直接用 | 先用 `if (found)` 檢查，或用 `?.` |
+| `TS2339: Property 'xxx' does not exist on type 'yyy'.` | 這個型別沒有這個屬性 | 檢查拼字；或型別定義裡少了這個欄位 |
+| `TS7006: Parameter 'x' implicitly has an 'any' type.` | 函式參數沒寫型別 | 幫參數加上型別 |
+| `TS2307: Cannot find module './xxx.ts'` | 找不到要 `import` 的檔案 | 檢查路徑與檔名，注意大小寫 |
+| `TS2304: Cannot find name 'xxx'.` | 用到沒定義的名稱 | 檢查拼字；是不是忘了 `import` |
+
+讀錯誤訊息的訣竅：**先看最後一行**，再看檔名與行號 `(行,列)`，到那一行去看。
+VS Code 把滑鼠移到紅線上就會顯示訊息，不必一直切到終端機。
+
+---
+
+## 附錄 B：TypeScript 速查表
+
+### 基本型別
+
+```ts
+let s: string = "文字";
+let n: number = 42;
+let b: boolean = true;
+let list: string[] = ["a", "b"];      // 陣列
+let maybe: string | undefined;        // 可能沒有值
+let anything: unknown;                // 未知，用前要檢查
+```
+
+### 物件與介面
+
+```ts
+interface MenuItem {
+  readonly id: number;    // 唯讀
+  name: string;
+  description?: string;   // 可選
+}
+
+type Point = { x: number; y: number };   // type 也能描述物件
+```
+
+### 聯合與字面量
+
+```ts
+type Size = "小杯" | "中杯" | "大杯";
+type Id = string | number;
+
+type Status =                                   // 判別聯合
+  | { kind: "ok"; data: string }
+  | { kind: "error"; message: string };
+```
+
+### 函式
+
+```ts
+function add(a: number, b: number): number { return a + b; }
+const double = (n: number): number => n * 2;    // 箭頭函式
+function log(msg: string): void {}              // 無回傳值
+function greet(name?: string) {}                // 可選參數
+function discount(total: number, rate = 0.9) {} // 預設參數
+```
+
+### 類別
+
+```ts
+class Register {
+  private orders: Order[] = [];
+  readonly shopName: string;
+  constructor(shopName: string) { this.shopName = shopName; }
+  createOrder(...): Order { ... }
+  get count(): number { return this.orders.length; }
+}
+```
+
+### 泛型
+
+```ts
+class Queue<T> { private items: T[] = []; }
+function firstOf<T>(list: T[]): T | undefined { return list[0]; }
+function cheapest<T extends { price: number }>(items: T[]): T | undefined { ... }
+```
+
+### 模組
+
+```ts
+export interface MenuItem { ... }
+export function printMenu() { ... }
+import { printMenu } from "./menu.ts";
+import type { MenuItem } from "./types.ts";
+```
+
+### 非同步
+
+```ts
+async function load(): Promise<string> {
+  try {
+    const result = await somethingAsync();
+    return result;
+  } catch (error) {
+    if (error instanceof Error) console.log(error.message);
+    throw error;
+  }
+}
+const all = await Promise.all([p1, p2, p3]);
+```
+
+### 工具型別
+
+```ts
+Partial<T>     // 全部可選
+Required<T>    // 全部必填
+Readonly<T>    // 全部唯讀
+Pick<T, K>     // 只挑 K
+Omit<T, K>     // 排除 K
+Record<K, V>   // 鍵 K 值 V 的對照表
+```
+
+### 型別縮小與守衛
+
+```ts
+if (typeof x === "string") { ... }
+if (x instanceof Error) { ... }
+if (x) { ... }                              // 排除 undefined / null
+function isMenuItem(v: unknown): v is MenuItem { ... }
+```
+
+### 常用指令
+
+```bash
+npm install --save-dev typescript tsx @types/node
+npm run dev src/xxx.ts     # tsx 直接執行
+npm run check              # tsc --noEmit 只檢查
+npm run build              # tsc 編譯到 dist/
+```
+
+---
+
+## 附錄 C：練習題提示
+
+這裡只給方向，不給完整答案。卡住的時候看一眼，然後自己寫完。
+
+**第 2 幕**：`const tableCount = 8;` 然後用樣板字串印出。改 `const` 的值會看到 `TS2588: Cannot assign to 'todaySpecial' because it is a constant.`
+
+**第 3 幕**：多加介面裡沒有的欄位會看到 `TS2353: Object literal may only specify known properties`。這是 TypeScript 的「多餘屬性檢查」。
+
+**第 4 幕**：`mostExpensive` 可以用 `reduce`，或用 `for` 迴圈維護一個 `best` 變數，像第 8 幕的 `cheapest`。
+
+**第 5 幕**：`describeTemperature` 用 `if (t === "冰" || t === "少冰")`。
+
+**第 6 幕**：`isActive` 可以寫成 `return status.kind === "pending" || status.kind === "preparing";`
+
+**第 7 幕**：`averageOrderValue` 記得先判斷 `this.orders.length === 0`，不然會除以零得到 `NaN`。
+
+**第 8 幕**：`isEmpty` 就是 `return this.items.length === 0;`
+
+**第 9 幕**：新檔案記得 `export`，用的地方記得 `import`，路徑要寫 `./discount.ts`。
+
+**第 10 幕**：改成 `for (const order of orders) { console.log(await makeDrink(order)); }` 之後總時間會變成 3.5 秒。
+`Promise.allSettled` 不會因為一個失敗就整個失敗，會告訴你每一個的結果。
+
+**第 11 幕**：`Record<"美式" | "拿鐵" | "卡布奇諾", number>` 少一個鍵會報 `TS2741` 缺少屬性，多一個鍵會報 `TS2353`。
+
+**第 12 幕**：`sourceMap` 會產生 `.js.map`，讓除錯工具能把 `.js` 的錯誤對應回 `.ts` 的行號。
