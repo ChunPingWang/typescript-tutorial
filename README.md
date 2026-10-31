@@ -16,6 +16,7 @@
 - [第 1 幕：開店前的準備 —— 環境設定與專案建立](#第-1-幕開店前的準備--環境設定與專案建立)
 - [第 2 幕：菜單上的第一杯咖啡 —— 變數與基本型別](#第-2-幕菜單上的第一杯咖啡--變數與基本型別)
 - [第 3 幕：一張完整的菜單 —— 陣列、物件與介面](#第-3-幕一張完整的菜單--陣列物件與介面)
+- [第 4 幕：收銀機要會算錢 —— 函式](#第-4-幕收銀機要會算錢--函式)
 
 ---
 
@@ -628,4 +629,163 @@ error TS2540: Cannot assign to 'id' because it is a read-only property.
 1. 在菜單加一個「抹茶拿鐵」，價格 140，說明自己想。
 2. 在 `MenuItem` 加一個可選欄位 `isHot?: boolean`，並且只在拿鐵填 `true`。
 3. 試著在某個品項多加一個介面裡沒有的欄位（例如 `color: "綠"`），看 TypeScript 怎麼說。
+
+---
+
+## 第 4 幕：收銀機要會算錢 —— 函式
+
+> **店長的需求**：「客人點了三杯，我要能算出總金額、印出收據。
+> 會員打 9 折，員工打 7 折。另外，客人進門要打招呼，知道名字就叫名字。」
+
+### 新概念：函式 —— 把一段步驟取個名字，重複使用
+
+「算總金額」這件事每一筆訂單都要做。與其每次重寫一遍，
+不如把步驟包起來，取個名字，需要時呼叫它。這就是**函式**。
+
+```ts
+function calculateTotal(items: MenuItem[]): number {
+  let total = 0;
+  for (const item of items) {
+    total += item.price;
+  }
+  return total;
+}
+```
+
+拆開來看：
+
+| 部分 | 意思 |
+|------|------|
+| `function calculateTotal` | 定義一個叫 `calculateTotal` 的函式 |
+| `(items: MenuItem[])` | **參數**：呼叫時要給一個品項陣列。這裡**一定要**寫型別，因為 TypeScript 猜不到別人會傳什麼進來 |
+| `: number` | **回傳型別**：這個函式算完會交出一個數字 |
+| `return total;` | 把結果交出去 |
+
+呼叫的方式：`calculateTotal(order)`。
+
+### 參數的三種變化
+
+```ts
+// 預設參數：不給 rate 就用 0.9
+function applyDiscount(total: number, rate: number = 0.9): number { ... }
+
+// 可選參數：customerName 可以不傳
+function greet(customerName?: string): string { ... }
+
+// 沒有回傳值：用 void
+function printReceipt(items: MenuItem[], total: number): void { ... }
+```
+
+### 箭頭函式：簡短寫法
+
+小工具函式常用更短的**箭頭函式**寫法，功能一樣：
+
+```ts
+const formatPrice = (amount: number): string => `NT$ ${amount}`;
+```
+
+讀法：「`formatPrice` 是一個函式，接收 `amount`，回傳箭頭右邊的東西。」
+
+### 動手寫：`src/04-functions.ts`
+
+```ts
+// 第 4 幕：收銀機要會算錢 —— 函式
+
+interface MenuItem {
+  readonly id: number;
+  name: string;
+  price: number;
+}
+
+// 1. 最基本的函式：參數要標型別，回傳值也標型別
+function calculateTotal(items: MenuItem[]): number {
+  let total = 0;
+  for (const item of items) {
+    total += item.price;
+  }
+  return total;
+}
+
+// 2. 預設參數：不給折扣率就用 9 折
+function applyDiscount(total: number, rate: number = 0.9): number {
+  return Math.round(total * rate);
+}
+
+// 3. 箭頭函式：寫法更短，常用在小工具函式
+const formatPrice = (amount: number): string => `NT$ ${amount}`;
+
+// 4. 沒有回傳值的函式：回傳型別是 void
+function printReceipt(items: MenuItem[], total: number): void {
+  console.log("====== 收據 ======");
+  for (const item of items) {
+    console.log(`${item.name.padEnd(6, "　")} ${formatPrice(item.price)}`);
+  }
+  console.log("------------------");
+  console.log(`合計 ${formatPrice(total)}`);
+}
+
+// 5. 可選參數：用 ? 表示可以不傳
+function greet(customerName?: string): string {
+  if (customerName) {
+    return `${customerName} 您好，歡迎光臨！`;
+  }
+  return "您好，歡迎光臨！";
+}
+
+// ---- 實際跑一次 ----
+const order: MenuItem[] = [
+  { id: 2, name: "拿鐵", price: 120 },
+  { id: 3, name: "卡布奇諾", price: 130 },
+  { id: 1, name: "美式", price: 90 },
+];
+
+console.log(greet());
+console.log(greet("小美"));
+
+const subtotal = calculateTotal(order);
+printReceipt(order, subtotal);
+
+console.log(`會員價（9 折）：${formatPrice(applyDiscount(subtotal))}`);
+console.log(`員工價（7 折）：${formatPrice(applyDiscount(subtotal, 0.7))}`);
+```
+
+補充：
+
+- `total += item.price` 是 `total = total + item.price` 的縮寫。
+- `Math.round(...)` 四捨五入到整數，`Math` 是 JavaScript 內建的數學工具箱。
+- `item.name.padEnd(6, "　")` 把名稱補到 6 個字寬，讓收據對齊（補的是全形空白）。
+- `if (customerName) { ... }`：**條件判斷**。`customerName` 有值才執行大括號裡的程式。
+
+### 執行結果
+
+```
+您好，歡迎光臨！
+小美 您好，歡迎光臨！
+====== 收據 ======
+拿鐵　　　　 NT$ 120
+卡布奇諾　　 NT$ 130
+美式　　　　 NT$ 90
+------------------
+合計 NT$ 340
+會員價（9 折）：NT$ 306
+員工價（7 折）：NT$ 238
+```
+
+### 故意寫錯看看
+
+`src-errors/04-wrong-argument.ts`：傳文字 `"340"` 給要數字的參數，以及多傳了一個參數。
+
+```
+error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+error TS2554: Expected 1-2 arguments, but got 3.
+```
+
+第二句：「預期 1 到 2 個參數，但你給了 3 個。」
+因為 `rate` 有預設值，所以可以給 1 個或 2 個，但 3 個就太多了。
+
+### 小練習
+
+1. 寫一個函式 `mostExpensive(items: MenuItem[]): MenuItem`，回傳最貴的品項。
+2. 把 `applyDiscount` 改成「折扣率超過 1 或小於 0 時，直接回傳原價」。
+3. 把 `printReceipt` 改成也印出「會員價」那一行。
 
