@@ -24,6 +24,7 @@
 - [第 9 幕：程式碼變多了 —— 模組與專案結構](#第-9-幕程式碼變多了--模組與專案結構)
 - [第 10 幕：向吧台送單要等一下 —— 非同步程式](#第-10-幕向吧台送單要等一下--非同步程式)
 - [第 11 幕：打烊前的整理 —— 工具型別與 unknown](#第-11-幕打烊前的整理--工具型別與-unknown)
+- [第 12 幕：正式上線 —— 編譯、輸出與執行](#第-12-幕正式上線--編譯輸出與執行)
 
 ---
 
@@ -1988,4 +1989,95 @@ console.log("解析壞掉的 JSON：", parseMenuItem('{"name":"沒有價格"}'))
 1. 用 `Pick` 做一個 `type PriceTag = Pick<MenuItem, "id" | "price">`，寫函式回傳所有品項的價格標籤陣列。
 2. 把 `stock` 的型別改成 `Record<"美式" | "拿鐵" | "卡布奇諾", number>`，看看多加一個鍵或少一個鍵會怎樣。
 3. 擴充 `isMenuItem`，讓 `description` 如果存在就必須是 `string`。
+
+---
+
+## 第 12 幕：正式上線 —— 編譯、輸出與執行
+
+> **店長的需求**：「系統可以用了！但店裡那台電腦沒有裝你的開發工具，
+> 給我一包可以直接跑的東西。」
+
+### 開發與上線的差別
+
+前面我們一直用 `npm run dev`（也就是 `tsx`）直接執行 `.ts`，方便但那是開發用。
+正式環境通常只有 Node.js，沒有 TypeScript 工具。所以要**編譯**成 `.js`：
+
+```bash
+npm run build
+```
+
+這會執行 `tsc`，根據 `tsconfig.json` 的設定：
+
+1. 檢查 `src/` 裡所有檔案的型別。有任何錯誤就會列出來，並且仍然輸出檔案（可以用 `noEmitOnError` 改成有錯不輸出）。
+2. 把每個 `.ts` 轉成 `.js`，放到 `dist/`，資料夾結構保持一樣。
+3. 把 `import "./menu.ts"` 改寫成 `import "./menu.js"`。
+
+編譯後的結構：
+
+```
+dist/
+├── 01-hello.js
+├── 02-basic-types.js
+├── ...
+└── 09-modules/
+    ├── main.js
+    ├── menu.js
+    ├── pricing.js
+    ├── register.js
+    └── types.js      ← 只有型別的檔案會變成幾乎空的 .js
+```
+
+打開 `dist/09-modules/main.js` 看看，你會發現所有型別標籤都不見了，剩下純 JavaScript：
+
+```js
+import { menu, findMenuItem, printMenu } from "./menu.js";
+import { formatPrice } from "./pricing.js";
+import { Register, describeStatus } from "./register.js";
+printMenu();
+```
+
+### 用 Node.js 直接執行編譯結果
+
+```bash
+node dist/09-modules/main.js
+```
+
+輸出和第 9 幕完全一樣。這就是你交給店長的東西：`dist/` 資料夾加上 `package.json`，
+在任何有 Node.js 的電腦上 `node dist/09-modules/main.js` 就能跑。
+
+本儲存庫的 `package.json` 把這件事包成了 `npm start`。
+
+### 三個指令的使用時機
+
+| 指令 | 什麼時候用 |
+|------|-----------|
+| `npm run dev src/xxx.ts` | 寫程式時，想馬上看結果 |
+| `npm run check` | 寫完一段、提交程式碼前，確認沒有型別錯誤 |
+| `npm run build` | 要交付、部署、或給沒裝開發工具的環境跑 |
+
+### 不要把這些東西交出去或提交到版本控制
+
+`.gitignore` 檔案裡列了兩個資料夾：
+
+```
+node_modules/
+dist/
+```
+
+- `node_modules/` 很大，而且任何人用 `npm install` 都能重新產生。
+- `dist/` 是編譯產物，用 `npm run build` 就能重新產生。
+
+原始碼（`src/`）、設定檔（`package.json`、`tsconfig.json`）才是要保存的東西。
+
+### 補充：Node.js 也能直接跑 .ts
+
+Node.js 22.18 以上可以直接執行只有型別註記的 `.ts` 檔：`node src/01-hello.ts`。
+但它只是**拿掉型別**，不會做型別檢查，而且某些語法（例如 `enum`）不支援。
+學習階段請仍然用 `tsx` 開發、`tsc` 檢查，養成好習慣。
+
+### 小練習
+
+1. 在 `tsconfig.json` 加上 `"noEmitOnError": true`，故意製造一個錯誤後 `npm run build`，確認 `dist/` 沒有更新。
+2. 在 `tsconfig.json` 加上 `"sourceMap": true`，看看 `dist/` 多了什麼檔案，查一下它的用途。
+3. 刪掉 `dist/`，重新 `npm run build`，再 `npm start`。
 
