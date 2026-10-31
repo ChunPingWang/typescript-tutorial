@@ -21,6 +21,7 @@
 - [第 6 幕：這杯做好了嗎？—— 判別聯合與 never](#第-6-幕這杯做好了嗎-判別聯合與-never)
 - [第 7 幕：店長想要一台點餐機 —— 類別](#第-7-幕店長想要一台點餐機--類別)
 - [第 8 幕：蛋糕也要能排隊 —— 泛型](#第-8-幕蛋糕也要能排隊--泛型)
+- [第 9 幕：程式碼變多了 —— 模組與專案結構](#第-9-幕程式碼變多了--模組與專案結構)
 
 ---
 
@@ -1408,4 +1409,261 @@ void CoffeeQueue;
 2. 寫一個泛型函式 `lastOf<T>(list: T[]): T | undefined`，回傳最後一個元素。
 3. 寫一個泛型函式 `pluckNames<T extends { name: string }>(items: T[]): string[]`，把所有名稱抽出來。
    （提示：`items.map((item) => item.name)`。）
+
+---
+
+## 第 9 幕：程式碼變多了 —— 模組與專案結構
+
+> **店長的需求**：「系統越來越大了，一個檔案幾百行我看了頭暈。
+> 可不可以菜單歸菜單、算錢歸算錢、點餐機歸點餐機，分開放？」
+
+### 新概念：模組 —— 一個檔案就是一個模組
+
+到目前為止每一幕都是一個檔案，而且 `MenuItem` 介面重複定義了好幾次。
+實際專案會把程式**拆成多個檔案**，每個檔案負責一件事，彼此透過 `export` 與 `import` 溝通：
+
+- `export`：「這個東西我願意借給別的檔案用。」
+- `import`：「我要跟某個檔案借東西。」
+
+```ts
+// menu.ts
+export const menu = [...];
+export function printMenu() { ... }
+
+// main.ts
+import { menu, printMenu } from "./menu.ts";
+```
+
+- `./` 代表「同一個資料夾」。`../` 代表「上一層資料夾」。
+- 引入**型別**（interface、type）時加上 `type` 關鍵字：`import type { MenuItem } from "./types.ts"`。
+  這告訴編譯器「這只是型別，編譯後可以整個拿掉」。
+- 路徑寫 `.ts` 副檔名。第 1 幕設定的 `rewriteRelativeImportExtensions` 會在編譯時自動改成 `.js`。
+
+### 專案結構
+
+這一幕把前面所有東西整合起來，變成一個完整的小系統：
+
+```
+src/09-modules/
+├── types.ts      ← 所有共用的型別（MenuItem、Order、OrderStatus...）
+├── menu.ts       ← 菜單資料與查詢
+├── pricing.ts    ← 算錢
+├── register.ts   ← 點餐機類別與狀態描述
+└── main.ts       ← 程式入口，把大家組合起來
+```
+
+原則：**型別放一起、資料放一起、邏輯放一起，入口檔只負責組裝。**
+
+### 動手寫
+
+**`src/09-modules/types.ts`** —— 共用型別：
+
+```ts
+// 共用的型別定義：整個專案都從這裡引用
+
+export interface MenuItem {
+  readonly id: number;
+  name: string;
+  price: number;
+  description?: string;
+}
+
+export type Size = "小杯" | "中杯" | "大杯";
+export type Temperature = "熱" | "冰" | "少冰" | "去冰";
+
+export interface OrderItem {
+  item: MenuItem;
+  size: Size;
+  temperature: Temperature;
+  quantity: number;
+}
+
+export type OrderStatus =
+  | { kind: "pending" }
+  | { kind: "preparing"; barista: string }
+  | { kind: "done"; finishedAt: Date }
+  | { kind: "cancelled"; reason: string };
+
+export interface Order {
+  id: number;
+  customerName: string;
+  lines: OrderItem[];
+  total: number;
+  status: OrderStatus;
+}
+```
+
+**`src/09-modules/menu.ts`** —— 菜單：
+
+```ts
+import type { MenuItem } from "./types.ts";
+
+export const menu: MenuItem[] = [
+  { id: 1, name: "美式", price: 90 },
+  { id: 2, name: "拿鐵", price: 120, description: "濃縮咖啡加上綿密牛奶" },
+  { id: 3, name: "卡布奇諾", price: 130, description: "奶泡多一點" },
+  { id: 4, name: "手沖單品", price: 150 },
+];
+
+export function findMenuItem(name: string): MenuItem | undefined {
+  return menu.find((item) => item.name === name);
+}
+
+export function printMenu(): void {
+  console.log("====== 菜單 ======");
+  for (const item of menu) {
+    console.log(`[${item.id}] ${item.name} ${item.price} 元`);
+  }
+}
+```
+
+**`src/09-modules/pricing.ts`** —— 算錢：
+
+```ts
+import type { OrderItem, Size } from "./types.ts";
+
+const SIZE_EXTRA: Record<Size, number> = { 小杯: 0, 中杯: 10, 大杯: 20 };
+
+export function lineTotal(line: OrderItem): number {
+  return (line.item.price + SIZE_EXTRA[line.size]) * line.quantity;
+}
+
+export function orderTotal(lines: OrderItem[]): number {
+  return lines.reduce((sum, line) => sum + lineTotal(line), 0);
+}
+
+export const formatPrice = (amount: number): string => `NT$ ${amount}`;
+```
+
+注意 `SIZE_EXTRA` 沒有 `export`，它是 `pricing.ts` 的內部細節，別的檔案不需要知道。
+
+**`src/09-modules/register.ts`** —— 點餐機：
+
+```ts
+import type { Order, OrderItem, OrderStatus } from "./types.ts";
+import { orderTotal } from "./pricing.ts";
+
+export class Register {
+  private orders: Order[] = [];
+  private nextId = 1;
+  readonly shopName: string;
+
+  constructor(shopName: string) {
+    this.shopName = shopName;
+  }
+
+  createOrder(customerName: string, lines: OrderItem[]): Order {
+    const order: Order = {
+      id: this.nextId++,
+      customerName,
+      lines,
+      total: orderTotal(lines),
+      status: { kind: "pending" },
+    };
+    this.orders.push(order);
+    return order;
+  }
+
+  updateStatus(id: number, status: OrderStatus): void {
+    const order = this.orders.find((o) => o.id === id);
+    if (!order) {
+      throw new Error(`找不到訂單 #${id}`);
+    }
+    order.status = status;
+  }
+
+  get totalRevenue(): number {
+    return this.orders
+      .filter((order) => order.status.kind !== "cancelled")
+      .reduce((sum, order) => sum + order.total, 0);
+  }
+}
+
+export function describeStatus(status: OrderStatus): string {
+  switch (status.kind) {
+    case "pending":
+      return "等待製作";
+    case "preparing":
+      return `${status.barista} 正在製作`;
+    case "done":
+      return `已完成（${status.finishedAt.toLocaleTimeString("zh-TW")}）`;
+    case "cancelled":
+      return `已取消：${status.reason}`;
+    default: {
+      const unhandled: never = status;
+      return unhandled;
+    }
+  }
+}
+```
+
+這裡出現 `throw new Error(...)`：**丟出錯誤**。找不到訂單是不該發生的事，
+與其默默略過，不如直接讓程式停下來並說明原因。第 10 幕會學怎麼「接住」錯誤。
+
+**`src/09-modules/main.ts`** —— 入口：
+
+```ts
+// 第 9 幕：程式碼變多了，該分檔案了 —— 模組（import / export）
+import { menu, findMenuItem, printMenu } from "./menu.ts";
+import { formatPrice } from "./pricing.ts";
+import { Register, describeStatus } from "./register.ts";
+import type { OrderItem } from "./types.ts";
+
+printMenu();
+
+const register = new Register("小日子咖啡");
+
+const latte = findMenuItem("拿鐵");
+const americano = findMenuItem("美式");
+
+if (!latte || !americano) {
+  throw new Error("菜單資料有問題");
+}
+
+const lines: OrderItem[] = [
+  { item: latte, size: "大杯", temperature: "少冰", quantity: 2 },
+  { item: americano, size: "小杯", temperature: "熱", quantity: 1 },
+];
+
+const order = register.createOrder("小美", lines);
+console.log(`\n建立訂單 #${order.id}，合計 ${formatPrice(order.total)}，狀態：${describeStatus(order.status)}`);
+
+register.updateStatus(order.id, { kind: "preparing", barista: "店長" });
+console.log(`更新後狀態：${describeStatus(order.status)}`);
+
+register.updateStatus(order.id, { kind: "done", finishedAt: new Date() });
+console.log(`更新後狀態：${describeStatus(order.status)}`);
+
+console.log(`\n菜單共 ${menu.length} 項，今日營業額 ${formatPrice(register.totalRevenue)}`);
+```
+
+注意 `if (!latte || !americano) { throw ... }` 這段：
+`findMenuItem` 回傳 `MenuItem | undefined`，經過這個檢查後，
+TypeScript 知道下面的 `latte` 和 `americano` 一定是 `MenuItem`，這又是型別縮小。
+
+### 執行結果
+
+```bash
+npm run dev src/09-modules/main.ts
+```
+
+```
+====== 菜單 ======
+[1] 美式 90 元
+[2] 拿鐵 120 元
+[3] 卡布奇諾 130 元
+[4] 手沖單品 150 元
+
+建立訂單 #1，合計 NT$ 370，狀態：等待製作
+更新後狀態：店長 正在製作
+更新後狀態：已完成（下午2:31:05）
+
+菜單共 4 項，今日營業額 NT$ 370
+```
+
+### 小練習
+
+1. 新增 `src/09-modules/discount.ts`，匯出 `applyMemberDiscount(total: number): number`（9 折），在 `main.ts` 用它。
+2. 在 `menu.ts` 新增 `menuByCategory`，把咖啡與非咖啡分開。這需要先在 `types.ts` 的 `MenuItem` 加 `category` 欄位。
+3. 試著把 `import type` 改成普通 `import`，看看有沒有差（提示：這個設定下兩者都能跑，但 `import type` 意圖更清楚）。
 

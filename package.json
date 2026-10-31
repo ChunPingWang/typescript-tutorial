@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx",
     "check": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc",
+    "start": "node dist/09-modules/main.js"
   },
   "license": "MIT",
   "devDependencies": {
