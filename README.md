@@ -20,6 +20,7 @@
 - [第 5 幕：客人說「大杯、少冰」—— 聯合型別與型別縮小](#第-5-幕客人說大杯少冰-聯合型別與型別縮小)
 - [第 6 幕：這杯做好了嗎？—— 判別聯合與 never](#第-6-幕這杯做好了嗎-判別聯合與-never)
 - [第 7 幕：店長想要一台點餐機 —— 類別](#第-7-幕店長想要一台點餐機--類別)
+- [第 8 幕：蛋糕也要能排隊 —— 泛型](#第-8-幕蛋糕也要能排隊--泛型)
 
 ---
 
@@ -1246,4 +1247,165 @@ error TS18048: 'found' is possibly 'undefined'.
    （提示：`this.orders = this.orders.filter((o) => o.id !== id)`。）
 2. 新增 getter `averageOrderValue`，回傳平均客單價。沒有訂單時回傳 0。
 3. 把 `shopName` 的 `readonly` 拿掉，試著在外面改店名，再加回去看差別。
+
+---
+
+## 第 8 幕：蛋糕也要能排隊 —— 泛型
+
+> **店長的需求**：「吧台做咖啡要排隊，現在蛋糕櫃也要有自己的排隊順序。
+> 咖啡訂單和蛋糕訂單的資料長得不一樣，但『排隊』這件事是一樣的：
+> 先進先出。我不想看到兩份幾乎一樣的程式碼。」
+
+### 新概念：泛型 —— 型別也可以當參數
+
+先看一個只能排咖啡的隊伍：
+
+```ts
+class CoffeeQueue {
+  private items: CoffeeOrder[] = [];
+  enqueue(item: CoffeeOrder): void { this.items.push(item); }
+  dequeue(): CoffeeOrder | undefined { return this.items.shift(); }
+}
+```
+
+蛋糕也要排隊，難道複製一份改名叫 `CakeQueue`？以後還有麵包、冰淇淋呢？
+
+注意這個類別裡 `CoffeeOrder` 出現了三次，而且**排隊的邏輯跟它是咖啡還是蛋糕完全無關**。
+如果能把 `CoffeeOrder` 挖空，變成一個「之後再填」的洞，就能重複使用了：
+
+```ts
+class Queue<T> {
+  private items: T[] = [];
+  enqueue(item: T): void { this.items.push(item); }
+  dequeue(): T | undefined { return this.items.shift(); }
+}
+```
+
+- `<T>` 就是那個洞，叫**型別參數**。`T` 只是習慣用的名字，叫 `<Item>` 也可以。
+- 使用時再填入：`new Queue<CoffeeOrder>()`、`new Queue<CakeOrder>()`。
+
+這就是**泛型**（generics）：「泛用的型別」。
+函式有參數讓值可以變，泛型讓**型別**可以變。你平常用的 `string[]` 其實就是 `Array<string>` 的縮寫，陣列本身就是泛型。
+
+### 動手寫：`src/08-generics.ts`
+
+```ts
+// 第 8 幕：不只咖啡，蛋糕也要能排隊 —— 泛型（generics）
+
+// 1. 先看一個「只能排咖啡訂單」的隊伍
+interface CoffeeOrder {
+  id: number;
+  drink: string;
+}
+
+class CoffeeQueue {
+  private items: CoffeeOrder[] = [];
+  enqueue(item: CoffeeOrder): void {
+    this.items.push(item);
+  }
+  dequeue(): CoffeeOrder | undefined {
+    return this.items.shift();
+  }
+}
+
+// 問題：蛋糕訂單也要排隊，難道要再複製一份 CakeQueue？
+
+// 2. 泛型：用 <T> 當「型別的參數」，建立時再決定 T 是什麼
+class Queue<T> {
+  private items: T[] = [];
+
+  enqueue(item: T): void {
+    this.items.push(item);
+  }
+
+  dequeue(): T | undefined {
+    return this.items.shift();
+  }
+
+  peek(): T | undefined {
+    return this.items[0];
+  }
+
+  get length(): number {
+    return this.items.length;
+  }
+}
+
+interface CakeOrder {
+  id: number;
+  cake: string;
+  candles: number;
+}
+
+// 3. 同一個 Queue，分別裝不同東西，型別都安全
+const coffeeQueue = new Queue<CoffeeOrder>();
+coffeeQueue.enqueue({ id: 1, drink: "拿鐵" });
+coffeeQueue.enqueue({ id: 2, drink: "美式" });
+
+const cakeQueue = new Queue<CakeOrder>();
+cakeQueue.enqueue({ id: 1, cake: "巧克力蛋糕", candles: 3 });
+
+// coffeeQueue.enqueue({ id: 3, cake: "起司蛋糕", candles: 0 }); // 錯誤！這是蛋糕，不是咖啡
+
+const nextCoffee = coffeeQueue.dequeue();
+if (nextCoffee) {
+  // TypeScript 知道 nextCoffee 是 CoffeeOrder，所以可以安心用 .drink
+  console.log(`下一杯要做：${nextCoffee.drink}`);
+}
+console.log(`咖啡隊伍還剩 ${coffeeQueue.length} 杯，蛋糕隊伍還剩 ${cakeQueue.length} 個`);
+
+// 4. 泛型函式：取出陣列第一個元素，不管陣列裡裝什麼
+function firstOf<T>(list: T[]): T | undefined {
+  return list[0];
+}
+
+const firstName = firstOf(["小美", "阿明"]);   // T 自動推論成 string
+const firstPrice = firstOf([120, 90, 130]);      // T 自動推論成 number
+console.log(`第一位客人：${firstName}，第一個價格：${firstPrice}`);
+
+// 5. 泛型限制（constraint）：T 至少要有 price 欄位
+function cheapest<T extends { price: number }>(items: T[]): T | undefined {
+  let best: T | undefined;
+  for (const item of items) {
+    if (!best || item.price < best.price) {
+      best = item;
+    }
+  }
+  return best;
+}
+
+const cheapestDrink = cheapest([
+  { name: "拿鐵", price: 120 },
+  { name: "美式", price: 90 },
+]);
+console.log(`最便宜的是：${cheapestDrink?.name}`);
+
+// 原本的 CoffeeQueue 可以功成身退了
+void CoffeeQueue;
+```
+
+補充：
+
+- `array.shift()`：拿走並回傳陣列的第一個元素。陣列是空的就回傳 `undefined`。
+- **泛型函式**呼叫時通常不必寫 `<string>`，TypeScript 會從你傳的陣列推論出來。
+- `<T extends { price: number }>`：**泛型限制**。意思是「T 可以是任何型別，但至少要有 `price` 數字欄位」，
+  這樣函式裡才能放心用 `item.price`。
+- `cheapestDrink?.name`：`?.` 叫**可選鏈**，意思是「如果 `cheapestDrink` 不是 `undefined` 才去讀 `.name`」。
+- 最後那行 `void CoffeeQueue;` 只是告訴編譯器「我知道這個類別沒用到」，避免警告，實務上你會直接把它刪掉。
+
+### 執行結果
+
+```
+下一杯要做：拿鐵
+咖啡隊伍還剩 1 杯，蛋糕隊伍還剩 1 個
+第一位客人：小美，第一個價格：120
+最便宜的是：美式
+```
+
+### 小練習
+
+1. 幫 `Queue<T>` 加一個 `clear(): void` 方法清空隊伍，以及 `isEmpty(): boolean`。
+2. 寫一個泛型函式 `lastOf<T>(list: T[]): T | undefined`，回傳最後一個元素。
+3. 寫一個泛型函式 `pluckNames<T extends { name: string }>(items: T[]): string[]`，把所有名稱抽出來。
+   （提示：`items.map((item) => item.name)`。）
 
