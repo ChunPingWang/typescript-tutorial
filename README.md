@@ -18,6 +18,7 @@
 - [第 3 幕：一張完整的菜單 —— 陣列、物件與介面](#第-3-幕一張完整的菜單--陣列物件與介面)
 - [第 4 幕：收銀機要會算錢 —— 函式](#第-4-幕收銀機要會算錢--函式)
 - [第 5 幕：客人說「大杯、少冰」—— 聯合型別與型別縮小](#第-5-幕客人說大杯少冰-聯合型別與型別縮小)
+- [第 6 幕：這杯做好了嗎？—— 判別聯合與 never](#第-6-幕這杯做好了嗎-判別聯合與-never)
 
 ---
 
@@ -934,4 +935,142 @@ error TS2322: Type '"特大杯"' is not assignable to type 'Size'.
 2. 把 `sizeExtra` 改成用 `if / else if` 寫，比較一下哪種好讀。
 3. 寫一個函式 `describeTemperature(t: Temperature): string`，冰的回傳「請加冰塊」，其他回傳「不加冰」。
    （提示：`"冰" | "少冰"` 要加冰塊。）
+
+---
+
+## 第 6 幕：這杯做好了嗎？—— 判別聯合與 never
+
+> **店長的需求**：「每筆訂單有四種狀態：等待中、製作中、完成、取消。
+> 製作中要記錄是誰在做，完成要記錄完成時間，取消要記錄原因。
+> 等待中什麼都不用記。我要能一眼看出每筆訂單的狀態。」
+
+### 新概念 1：判別聯合 —— 每種狀態帶不同的資料
+
+這個需求的難點在於**每種狀態附帶的資料不一樣**。如果用一個大物件裝所有欄位：
+
+```ts
+// 不好的做法
+interface OrderStatus {
+  kind: string;
+  barista?: string;
+  finishedAt?: Date;
+  reason?: string;
+}
+```
+
+所有欄位都變成可選，TypeScript 就沒辦法幫你檢查「完成狀態一定有完成時間」。
+
+更好的做法是把每種狀態寫成一個小物件，用一個共同欄位 `kind` 來區分，再用 `|` 串起來：
+
+```ts
+type OrderStatus =
+  | { kind: "pending" }
+  | { kind: "preparing"; barista: string }
+  | { kind: "done"; finishedAt: Date }
+  | { kind: "cancelled"; reason: string };
+```
+
+這叫**判別聯合**（discriminated union），`kind` 是「判別欄位」。
+在 `switch (status.kind)` 的每個 `case` 裡，TypeScript 會自動知道現在是哪一種狀態、有哪些欄位可以用。
+
+這個模式在實務上非常常見：API 回應（成功或失敗）、付款結果、表單狀態都適用。
+
+### 新概念 2：never —— 「不可能發生」的型別
+
+假設半年後店長新增了「退款」狀態，但你忘了在 `describeStatus` 裡處理，怎麼辦？
+在 `default` 裡放一個 `never` 型別的變數：
+
+```ts
+default: {
+  const unhandled: never = status;
+  return unhandled;
+}
+```
+
+`never` 代表「這裡不可能到達」。如果所有狀態都處理了，`status` 在 `default` 裡確實沒有任何可能，可以指定給 `never`。
+但如果有狀態漏掉，`status` 就還有剩餘的可能，不能指定給 `never`，**編譯錯誤會提醒你**。
+
+這是一個小技巧，卻能避免很多線上事故。
+
+### 動手寫：`src/06-order-status.ts`
+
+```ts
+// 第 6 幕：這杯做好了嗎？—— 用判別聯合（discriminated union）描述訂單狀態
+
+// 1. 每一種狀態帶的資料都不一樣，但都有一個共同欄位 kind 用來「判別」
+type OrderStatus =
+  | { kind: "pending" }                          // 等待中：沒有額外資料
+  | { kind: "preparing"; barista: string }       // 製作中：誰在做
+  | { kind: "done"; finishedAt: Date }           // 完成：什麼時候完成
+  | { kind: "cancelled"; reason: string };       // 取消：為什麼取消
+
+interface Order {
+  id: number;
+  customerName: string;
+  status: OrderStatus;
+}
+
+// 2. 用 switch 判斷 kind，TypeScript 會在每個 case 裡自動知道有哪些欄位
+function describeStatus(status: OrderStatus): string {
+  switch (status.kind) {
+    case "pending":
+      return "等待製作";
+    case "preparing":
+      return `${status.barista} 正在製作`;      // 只有這個 case 可以用 barista
+    case "done":
+      return `已完成（${status.finishedAt.toLocaleTimeString("zh-TW")}）`;
+    case "cancelled":
+      return `已取消：${status.reason}`;
+    default: {
+      // 3. never：如果未來新增了狀態卻忘了處理，這一行會編譯錯誤提醒你
+      const unhandled: never = status;
+      return unhandled;
+    }
+  }
+}
+
+// ---- 實際跑一次 ----
+const orders: Order[] = [
+  { id: 101, customerName: "小美", status: { kind: "pending" } },
+  { id: 102, customerName: "阿明", status: { kind: "preparing", barista: "店長" } },
+  { id: 103, customerName: "小花", status: { kind: "done", finishedAt: new Date() } },
+  { id: 104, customerName: "大雄", status: { kind: "cancelled", reason: "客人趕時間" } },
+];
+
+for (const order of orders) {
+  console.log(`#${order.id} ${order.customerName}：${describeStatus(order.status)}`);
+}
+```
+
+補充：
+
+- `Date` 是 JavaScript 內建的「日期時間」型別，`new Date()` 代表現在。
+- `.toLocaleTimeString("zh-TW")` 把時間轉成台灣習慣的格式。
+
+### 執行結果
+
+```
+#101 小美：等待製作
+#102 阿明：店長 正在製作
+#103 小花：已完成（下午2:30:11）
+#104 大雄：已取消：客人趕時間
+```
+
+（時間會是你執行當下的時間。）
+
+### 故意寫錯看看
+
+`src-errors/06-missing-case.ts` 新增了 `refunded` 狀態但沒處理：
+
+```
+error TS2322: Type '{ kind: "refunded"; }' is not assignable to type 'never'.
+```
+
+「`refunded` 這種狀態不能指定給 `never`。」翻成白話：「你漏了 refunded 沒處理。」
+
+### 小練習
+
+1. 新增一個狀態 `{ kind: "refunded"; amount: number }`，先看到錯誤，再補上 `case` 讓它消失。
+2. 寫一個函式 `isActive(status: OrderStatus): boolean`，等待中與製作中回傳 `true`。
+3. 把 `describeStatus` 的 `switch` 改用 `if (status.kind === "...")` 寫一次，感受兩者差別。
 
